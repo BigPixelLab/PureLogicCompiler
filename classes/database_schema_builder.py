@@ -147,9 +147,7 @@ class DatabaseSchemaBuilder:
             for path in schema_files:
                 with open(path, 'rt', encoding='utf-8') as file:
                     dsb.partial_load(file.read())
-            dsb.finalize()
-
-            print(dsb.get_sql())
+            schema = dsb.finalize()
 
         """
         data = yaml.safe_load(pl_schema)

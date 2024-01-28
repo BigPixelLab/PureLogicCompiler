@@ -8,7 +8,7 @@ class SqlBuilder:
         raise NotImplementedError
 
 
-class PostgreSqlBuilder:
+class PostgreSqlBuilder(SqlBuilder):
     VALID_SCHEMA_PATTERN = re.compile(
         r'\w+',
         flags=re.VERBOSE
