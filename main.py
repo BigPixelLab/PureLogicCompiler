@@ -1,372 +1,165 @@
-import re
-from pprint import pprint
-from typing import Optional
+import argparse
+import datetime
+import os
+import subprocess
+import sys
 
-import yaml
-from pydantic import BaseModel
-
-"""
-table:
-- id: uuid
-- db_name: str
+from classes.database_schema_builder import DatabaseSchemaBuilder
+from classes.sql_builder import PostgreSqlBuilder, DEFAULT_TYPE_TABLE
 
 
-field:
-- id: uuid
-- table_id: fk table
+class CheckExecutionTime:
+    def __init__(self):
+        self._start_time = None
+        self._end_time = None
+        self._total_time = None
 
-- is_optional: bool = false
-  $: Является ли поле необязательным
-- default: text? = null
-- comment: text? = null
+    def __enter__(self):
+        self._start_time = datetime.datetime.now()
 
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._end_time = datetime.datetime.now()
+        self._total_time = self._end_time - self._start_time
 
-field_primary_key:
-- $pk: (field_id, primary_key_id)
-
-- field_id: fk field
-- primary_key_id: fk primary_key
-
-
-primary_key:
-- id: uuid
-- field_id: fk field
+    def total(self):
+        return self._total_time.total_seconds() * 10**3
 
 
-field_unique:
-- $pk: (field_id, unique_id)
+def setup(args):
 
-- field_id: fk field
-- unique_id: fk unique
+    timer = CheckExecutionTime()
 
+    with timer:
+        print('Обновляем pip...')
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'pip'])
 
-unique:
-- id: uuid
-- field_id: fk field
+        print('\n\nУстановка PyYaml...')
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'PyYaml'])
 
+        print('\n\nУстановка pydantic...')
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'pydantic'])
 
-foreign_key:
-- id: uuid
-- field_id: fk field
-- table_id: fk table
-"""
-
-# [schema.]table:
-# - field: [pk|uq] type[?] [= default]
-# (?:(pk|uq)\s+)?(\w+)(\?)?(?:\s*=\s*(.*))
-
-# - field: fk [schema.]table[?]
-# fk\s+((?:\w+\.)?\w+)(\?)?
-
-# - $pk: (<field1>, <field2>, ...)
-# - $uq: (<field1>, <field2>, ...)
-# - $check: <condition>
+    print(f'\n\nУстановка завершена за {timer.total():.03f}мс.\n')
 
 
-FIELD_PATTERN = re.compile(
-    r'(?: (?P<rule> pk | uq! | uq ) \s+ )? '
-    r'(?P<type> \w+ ) '
-    r'(?P<is_opt> \? )? '
-    r'(?: \s* = \s* (?P<default> .*? ) \s* )?',
-    flags=re.VERBOSE
-)
+def compile_to_ddl(args):
 
-FOREIGN_KEY_PATTERN = re.compile(
-    r'(?: (?P<rule> pk | uq! | uq ) \s+ )? '
-    r'fk \s+ '
-    r'(?P<table> (?: \w+\. )? \w+ ) '
-    r'(?P<is_opt> \? ) ',
-    flags=re.VERBOSE
-)
+    if not os.path.exists(args.input):
+        print('Указанный в качестве источника схемы путь не существует.')
 
-PK_UQ_PATTERN = re.compile(
-    r'\( (?P<fields> '
-    r'    \w+ '
-    r'    (?: \s* , \s* \w+ )* '
-    r') \)',
-    flags=re.VERBOSE
-)
+    if os.path.isdir(args.input) and args.recursive:
+        schema_files = []
 
-PK_UQ_FIELDS_SEP_PATTERN = re.compile(
-    r'\s* , \s*',
-    flags=re.VERBOSE
-)
-
-
-data = """
-auth.user:
-- id: pk uuid
-- telegram_id: uq int
-  
-- created_at: datetime
-- created_by: str
-- updated_at: datetime
-- updated_by: str
-
-- botpiska_credits: int)
-- season_credits: int
-- has_seasonpass: bool
-
-
-auth.role:
-- id: pk uuid
-
-- alias: str
-- is_actual: bool
-- created_at: datetime
-- created_by: str
-- updated_at: datetime
-- updated_by: str
-
-- title: str
-
-
-auth.user_role:
-- role_id: fk auth.role
-- user_id: fk auth.user
-- $pk: (role_id, user_id)
-
-- created_at: datetime
-- created_by: str
-- updated_at: datetime
-- updated_by: str
-
-
-auth.permission:
-- id: pk uuid
-
-- alias: str
-- is_actual: bool
-- created_at: datetime
-- created_by: str
-- updated_at: datetime
-- updated_by: str
-
-- title: str
-
-
-auth.role_permission:
-- role_id: fk auth.role
-- permission_id: fk auth.permission
-- $pk: (role_id, permission_id)
-
-- created_at: datetime
-- created_by: str
-- updated_at: datetime
-- updated_by: str
-
-"""
-
-
-class FkResolve(BaseModel):
-    table_name: str
-    match: re.Match
-
-
-tables_data = yaml.unsafe_load(data)
-
-tables_pk = {}
-tables = {}
-
-foreign_keys = []
-comments = []
-
-for table_name, table_data in tables_data.items():
-    tables_pk[table_name] = table_pk = []
-    tables[table_name] = table = []
-
-    for attr in table_data:
-
-        try:
-            comment = attr.pop('$')
-        except KeyError:
-            comment = None
-
-        if len(attr) == 0:
-            raise ValueError(
-                'Поле таблицы на может содержать только комментарий:\n'
-                '- $: comment  # неверно\n'
-                '\n'
-                'Попробуйте:\n'
-                '- field: int    # верно\n'
-                '  $: comment\n'
+        for directory, _, files in os.walk(args.input):
+            schema_files.extend(
+                os.path.join(directory, file)
+                for file in files
             )
 
-        if len(attr) > 1:
-            raise ValueError(
-                'Лишние данные в описании поля:\n'
-                '- field1: int\n'
-                '  field2: int  # неверно\n'
-                '\n'
-                'Попробуйте:\n'
-                '- field1: int\n'
-                '- field2: int  # верно\n'
-            )
+    elif os.path.isdir(args.input) and not args.recursive:
+        schema_files = [
+            path
+            for path in os.listdir(args.input)
+            if os.path.isfile(path)
+        ]
 
-        attr_name, attr_value = next(iter(attr.items()))
+    elif os.path.isfile(args.input):
+        schema_files = [args.input]
 
-        if comment and attr_name.startswith('$'):
-            raise ValueError('Невозможно установить комментарий на правило')
+    else:
+        print('Указанный в качестве источника схемы путь не ведёт к файлу или директории')
+        return
 
-        if comment and "'" in comment:
-            raise ValueError('Комментарии не могут содержать символов "\'"')
+    dsb = DatabaseSchemaBuilder()
+    timer = CheckExecutionTime()
 
-        if comment:
-            comments.append(f"""COMMENT ON COLUMN {table_name}.{attr_name} IS '{comment}';""")
+    if not args.silent:
+        print('Поехали!')
 
-        pk_uq_match = re.match(PK_UQ_PATTERN, attr_value)
+    with timer:
+        for path in schema_files:
+            if not args.silent:
+                print(f'Обработка файла "{path}"...  ', end='')
 
-        if attr_name == '$pk':
+            with open(path, 'rt', encoding='utf-8') as file:
+                content = file.read()
 
-            if pk_uq_match is None:
-                raise ValueError(f'Неверный формат $pk правила в описании таблицы "{table_name}"')
+            try:
+                dsb.partial_load(content)
+            except ValueError as error:
+                if not args.silent:
+                    print(f'ОШИБКА')
 
-            fields = re.split(
-                PK_UQ_FIELDS_SEP_PATTERN,
-                pk_uq_match.group('fields')
-            )
+                print('ERROR:', *error.args)
+                return
 
-            table_pk.extend(fields)
+            if not args.silent:
+                print(f'100%')
 
-            table.append(
-                'PRIMARY KEY ({fields})'.format(
-                    fields=pk_uq_match.group('fields')
-                )
-            )
+        schema = dsb.finalize()
 
-            continue
+    builder = PostgreSqlBuilder(schema, restrict_types_table=DEFAULT_TYPE_TABLE)
+    ddl = builder.get_db_sql()
 
-        if attr_name == '$uq!':
+    if args.output is not None:
+        with open(args.output, 'wt', encoding='utf-8') as file:
+            file.write(ddl)
+    else:
+        print(ddl)
+        print()
 
-            if pk_uq_match is None:
-                raise ValueError(f'Неверный формат $uq правила в описании таблицы "{table_name}"')
+    if not args.silent:
+        print(f'Компиляция завершена за {timer.total():.03f}мс.\n')
 
-            table.append(
-                'UNIQUE NULLS DISTINCT ({fields})'.format(
-                    fields=pk_uq_match.group('fields')
-                )
-            )
 
-            continue
-
-        if attr_name == '$uq':
-
-            if pk_uq_match is None:
-                raise ValueError(f'Неверный формат $uq правила в описании таблицы "{table_name}"')
-
-            table.append(
-                'UNIQUE NULLS NOT DISTINCT ({fields})'.format(
-                    **pk_uq_match.groupdict()
-                )
-            )
-
-            continue
-
-        if attr_name == '$check':
-            table.append(
-                'CHECK {condition}'.format(
-                    condition=attr_value
-                )
-            )
-
-            continue
-
-        if attr_name.startswith('$'):
-            raise ValueError(f'Неизвестное правило "{attr_name}" в таблице "{table_name}"')
-
-        if not re.fullmatch(r'\w+', attr_name):
-            raise ValueError(f'Невозможно создать поле с именем "{attr_name}" в таблице "{table_name}"')
-
-        if match := re.fullmatch(FIELD_PATTERN, attr_value):
-            items = [attr_name, match.group('type')]
-
-            if match.group('is_opt') is None:
-                items.append('NOT NULL')
-
-            if match.group('rule') == 'pk':
-                items.append('PRIMARY KEY')
-                table_pk.append(attr_name)
-
-            if match.group('rule') == 'uq':
-                items.append('UNIQUE NULLS NOT DISTINCT')
-
-            if match.group('rule') == 'uq!':
-                items.append('UNIQUE NULLS DISTINCT')
-
-            if default := match.group('default'):
-                items.append(f'DEFAULT {default}')
-
-            table.append(' '.join(items))
-
-        if match := re.fullmatch(FOREIGN_KEY_PATTERN, attr_value):
-            foreign_keys.append(FkResolve(
-                table_name=table_name,
-                match=match
-            ))
-
-rendered_fk = []
-
-for fk in foreign_keys:
-
-    referenced_table = fk.match.group('table')
-    containing_table = fk.table_name
-
-    try:
-        pks = tables_pk[referenced_table]
-    except KeyError:
-        raise ValueError(f'Нет описанной таблицы "{referenced_table}", чтобы на неё сослаться')
-
-    if len(pks) > 1:
-        raise ValueError('Не реализована возможнать ссылаться на таблицы с несколькими ключами')
-
-    if len(pks) == 0:
-        raise ValueError(f'Таблица "{referenced_table}" не содержит ключа, чтобы на неё сослаться')
-
-    # items = [attr_name, match.group('type')]
-    #
-    # if match.group('is_opt') is None:
-    #     items.append('NOT NULL')
-    #
-    # if match.group('rule') == 'pk':
-    #     items.append('PRIMARY KEY')
-    #     table_pk.append(attr_name)
-    #
-    # if match.group('rule') == 'uq':
-    #     items.append('UNIQUE NULLS NOT DISTINCT')
-    #
-    # if match.group('rule') == 'uq!':
-    #     items.append('UNIQUE NULLS DISTINCT')
-    #
-    # if default := match.group('default'):
-    #     items.append(f'DEFAULT {default}')
-    #
-    # table.append(' '.join(items))
-
-    rendered_fk.append(
-        'ALTER TABLE {cnt_table} '
-        'ADD CONSTRAINT fk_{cnt_f_table}_{field_name} '
-        'FOREIGN KEY ({field_name}) REFERENCES {rfs_table} ({rfs_table_pk});'.format(
-            cnt_table=containing_table,
-            cnt_f_table=containing_table.replace('.', '_'),
-            rfs_table=referenced_table,
-            rfs_table_pk=pks[0],
-            field_name=...  # TODO: fk.field_name
-        )
+def parse_cmd_arguments():
+    parser = argparse.ArgumentParser(
+        description='Инструмент для работы со схемами баз данных, '
+                    'описанных в формате PureLogic.'
     )
 
-rendered_tables = []
-
-for table_name, table_attrs in tables.items():
-    rendered_tables.append(
-        f'CREATE TABLE {table_name} (\n' +
-        ',\n'.join(f'    {attr}' for attr in table_attrs) + '\n'
-        ');'
+    subparsers = parser.add_subparsers(
+        title='подкомманды',
+        description='доступные подкомманды'
     )
 
-rendered = '\n\n'.join((
-    *rendered_tables,
-    '\n'.join(rendered_fk),
-    '\n'.join(comments)
-))
+    # Команда для установки
+    setup_parser = subparsers.add_parser('setup',
+                                         help='Установить необходимые пакеты')
+    setup_parser.set_defaults(function=setup)
 
-print(rendered)
+    # Комманды для компиляции
+    compile_parser = subparsers.add_parser('compile',
+                                           help='Конпиляция схемы в DDL')
+    compile_parser.add_argument('input',
+                                help='Путь к файлу или директории содержащей схему')
+    compile_parser.add_argument('-o', '--output', default=None,
+                                help='Путь к месту сохранения DDL скрипта. '
+                                     'Если не указан, скрипт будет выведен в stdout')
+    compile_parser.add_argument('-r', '--recursive', action='store_true',
+                                help='Рекурсивный обход директории, содержащей схему')
+    compile_parser.add_argument('-s', '--silent', action='store_true',
+                                help='Не выводить информацию предназначенную для пользователя')
+    compile_parser.set_defaults(function=compile_to_ddl)
+
+    args: argparse.Namespace = parser.parse_args()
+
+    if hasattr(args, 'function'):
+        args.function(args)
+
+
+if __name__ == '__main__':
+    parse_cmd_arguments()
+
+
+# table = dsb.tables[1]
+# connections = dsb.get_connections(table)
+#
+# print(table.full_name)
+# for symbol, ref_table, mid_table in connections:
+#     items = [symbol, ref_table.full_name]
+#
+#     if mid_table:
+#         items.append(f' ({mid_table.full_name})')
+#
+#     print(' '.join(items))
