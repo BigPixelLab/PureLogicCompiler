@@ -3,7 +3,7 @@ from typing import Optional
 
 import yaml
 
-from classes.types import Table, ForeignKey, ComplexUniqueness, Field, UniqueType, ConnectType, DbSchema
+from classes.types import Table, ForeignKey, ComplexUniqueness, Field, UniqueType, ConnectType, DbSchema, OnDeleteAction
 
 
 class DatabaseSchemaBuilder:
@@ -76,11 +76,19 @@ class DatabaseSchemaBuilder:
 
             table.fields.append(field)
 
+            if match.group('is_cascade'):
+                action = OnDeleteAction.CASCADE
+            elif match.group('is_optional'):
+                action = OnDeleteAction.SET_NULL
+            else:
+                action = OnDeleteAction.NO_ACTION
+
             self._foreign_keys.append(ForeignKey(
                 referenced_schema=match.group('schema') or 'public',
                 referenced_name=match.group('table'),
                 containing_table=table,
-                field=field
+                field=field,
+                on_delete=action
             ))
 
             return
@@ -315,6 +323,6 @@ FIELD_PATTERN = re.compile(
 FOREIGN_KEY_PATTERN = re.compile(
     r'(?: (?P<uniqueness> pk | uq! | uq ) \s+ )? '
     r'fk \s+ (?: (?P<schema> \w+ ) \. )? (?P<table> \w+ ) '
-    r'(?P<is_optional> \? )? ',
+    r'(?: (?P<is_optional> \? ) | (?P<is_cascade> ! ) )? ',
     flags=re.VERBOSE
 )

@@ -12,6 +12,12 @@ class UniqueType(Enum):
     PRIMARY_KEY = auto()
 
 
+class OnDeleteAction(Enum):
+    NO_ACTION = auto()
+    SET_NULL = auto()
+    CASCADE = auto()
+
+
 class ConnectType(IntEnum):
     # is_not_unique, is_other_table, is_optional
     SOME_TO_EVERY = 0b000  # o-
@@ -85,6 +91,8 @@ class ForeignKey(BaseModel):
 
     containing_table: Table
     field: Field
+
+    on_delete: OnDeleteAction
 
 
 class DbSchema(BaseModel):

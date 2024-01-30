@@ -1,6 +1,6 @@
 import re
 
-from classes.types import Table, ForeignKey, Field, UniqueType, ComplexUniqueness, DbSchema
+from classes.types import Table, ForeignKey, Field, UniqueType, ComplexUniqueness, DbSchema, OnDeleteAction
 
 
 class SqlBuilder:
@@ -147,11 +147,18 @@ class PostgreSqlBuilder(SqlBuilder):
     def get_foreign_key_sql(self, fk: ForeignKey):
         ref_pk = fk.referenced_table.get_reference_pk()
 
-        return (
+        items = [
             f'ALTER TABLE {fk.containing_table.full_name} '
             f'ADD CONSTRAINT fk_{fk.containing_table.pg_schema}_{fk.containing_table.name}_{fk.field.name} '
-            f'FOREIGN KEY ({fk.field.name}) REFERENCES {fk.referenced_table.full_name} ({ref_pk.name});'
-        )
+            f'FOREIGN KEY ({fk.field.name}) REFERENCES {fk.referenced_table.full_name} ({ref_pk.name})'
+        ]
+
+        if fk.on_delete == OnDeleteAction.SET_NULL:
+            items.append('ON DELETE SET NULL')
+        elif fk.on_delete == OnDeleteAction.CASCADE:
+            items.append('ON DELETE CASCADE')
+
+        return ' '.join(items) + ';'
 
     def get_db_sql(self):
         sql_statements = []
