@@ -103,8 +103,11 @@ class PostgreSqlBuilder(SqlBuilder):
                 self.get_uniqueness_sql(field.uniqueness)
             )
 
-        if field.default:
+        if field.default and not field.is_computed:
             items.append(f'DEFAULT {field.default}')
+
+        if field.default and field.is_computed:
+            items.append(f'GENERATED ALWAYS AS ({field.default}) STORED')
 
         return ' '.join(items)
 

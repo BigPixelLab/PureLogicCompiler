@@ -58,6 +58,7 @@ class DatabaseSchemaBuilder:
                 uniqueness=UNIQUENESS_TEXT_TO_TYPE[match.group('uniqueness')],
                 type=match.group('type'),
                 is_optional=match.group('is_optional') is not None,
+                is_computed=match.group('is_computed') is not None,
                 default=default,
                 comment=comment
             ))
@@ -70,6 +71,7 @@ class DatabaseSchemaBuilder:
                 uniqueness=UNIQUENESS_TEXT_TO_TYPE[match.group('uniqueness')],
                 type='',  # will be overridden later
                 is_optional=match.group('is_optional') is not None,
+                is_computed=False,
                 default=None,
                 comment=comment
             )
@@ -316,7 +318,7 @@ FIELD_PATTERN = re.compile(
     r'(?: (?P<uniqueness> pk | uq! | uq ) \s+ )? '
     r'(?P<type> \w+ (?: \( \s* \d+ (?: \s* , \s* \d+ )* \s* \) )? ) '
     r'(?P<is_optional> \? )? '
-    r'(?: \s* = \s* (?P<default> .* ) \s* )?',
+    r'(?: \s* (?P<is_computed> : )? = \s* (?P<default> .* ) \s* )?',
     flags=re.VERBOSE
 )
 

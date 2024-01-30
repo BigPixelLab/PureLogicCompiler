@@ -1,5 +1,4 @@
 from enum import Enum, auto, IntEnum
-from itertools import chain
 from typing import Optional
 
 from pydantic import BaseModel
@@ -37,6 +36,7 @@ class Field(BaseModel):
     uniqueness: UniqueType
     type: str
     is_optional: bool
+    is_computed: bool
     default: Optional[str]
     comment: Optional[str]
 
