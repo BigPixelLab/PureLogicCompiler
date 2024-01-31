@@ -62,14 +62,14 @@ class Application:
 
         print('ERROR:', *exception.args)
 
-    def _load_schema(self, schema_files: Iterable[str]) -> Optional[DbSchema]:
+    def _load_schema(self, schema_files: Iterable[str], encoding: str) -> Optional[DbSchema]:
         dsb = DatabaseSchemaBuilder()
 
         self.notify('ЗАГРУЗКА СХЕМЫ:')
         for path in schema_files:
             self.notify(f'Обработка файла "{path}"...  ', end='')
 
-            with open(path, 'rt', encoding='utf-8') as file:
+            with open(path, 'rt', encoding=encoding) as file:
                 content = file.read()
 
             try:
@@ -101,6 +101,8 @@ class Application:
         return ddl
 
     def compile_to_ddl(self):
+        encoding = getattr(self._args, 'encoding', 'utf-8')
+
         try:
             schema_files = get_files(self._args.input, recursive=self._args.recursive)
         except Exception as error:
@@ -108,7 +110,7 @@ class Application:
             return
 
         with (timer := ExecutionTimeContextManager()):
-            if (schema := self._load_schema(schema_files)) is None:
+            if (schema := self._load_schema(schema_files, encoding=encoding)) is None:
                 return
 
             if (ddl := self._generate_ddl(schema)) is None:
