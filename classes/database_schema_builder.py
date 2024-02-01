@@ -1,5 +1,5 @@
 import re
-from typing import Optional
+from typing import Optional, Union
 
 import yaml
 
@@ -11,23 +11,18 @@ class DatabaseSchemaBuilder:
         self._foreign_keys = []
         self._tables = []
 
-    def _parse_attribute(self, table: Table, name: str, value: str):
-        pk_uq_match = re.match(PK_UQ_PATTERN, value)
+    def _parse_attribute(self, table: Table, name: str, value: Union[str, list]):
 
         if match := re.fullmatch(UNIQUENESS_FIELD_PATTERN, name):
 
             uniqueness = match.group('uniqueness')
 
-            if pk_uq_match is None:
-                raise ValueError(f'Неверный формат "{uniqueness}" правила в таблице "{table.full_name}"')
-
-            fields = re.split(
-                PK_UQ_FIELDS_SEP_PATTERN,
-                pk_uq_match.group('fields')
-            )
+            if not isinstance(value, list):
+                raise ValueError(f'Неверный формат "{uniqueness}" правила в таблице "{table.full_name}", '
+                                 f'ожидался список полей')
 
             table.complex_uniqueness.append(ComplexUniqueness(
-                fields=fields,
+                fields=value,
                 uniqueness=UNIQUENESS_TEXT_TO_TYPE[uniqueness]  # '$pk1' -> 'pk'
             ))
 
@@ -296,16 +291,6 @@ UNIQUENESS_FIELD_PATTERN = re.compile(
 
 CHECK_FIELD_PATTERN = re.compile(
     r'\$ check (?: _ \w* )?',
-    flags=re.VERBOSE
-)
-
-PK_UQ_PATTERN = re.compile(
-    r'\( \s* (?P<fields> \w+ (?: \s* , \s* \w+ )* ) \s* \)',
-    flags=re.VERBOSE
-)
-
-PK_UQ_FIELDS_SEP_PATTERN = re.compile(
-    r'\s* , \s*',
     flags=re.VERBOSE
 )
 
