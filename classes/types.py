@@ -95,6 +95,12 @@ class ForeignKey(BaseModel):
     on_delete: OnDeleteAction
 
 
+class Index(BaseModel):
+    table: Table
+    field: str
+
+
 class DbSchema(BaseModel):
     foreign_keys: list[ForeignKey]
+    indexes: list[Index]
     tables: list[Table]

@@ -3,12 +3,18 @@ from typing import Optional, Union
 
 import yaml
 
-from classes.types import Table, ForeignKey, ComplexUniqueness, Field, UniqueType, ConnectType, DbSchema, OnDeleteAction
+from classes.types import Table, ForeignKey, ComplexUniqueness, Field, UniqueType, ConnectType, DbSchema, \
+    OnDeleteAction, Index
 
 
 class DatabaseSchemaBuilder:
-    def __init__(self):
+    """ Класс, отвечающий за загрузку схемы базы данных """
+
+    def __init__(self, add_fk_indexes: bool = False):
+        self._add_fk_indexes = add_fk_indexes
+
         self._foreign_keys = []
+        self._indexes = []
         self._tables = []
 
     def _parse_attribute(self, table: Table, name: str, value: Union[str, list]):
@@ -88,6 +94,16 @@ class DatabaseSchemaBuilder:
                 on_delete=action
             ))
 
+            # Для уникальных полей индекс создаётся автоматически, так что нам нет смысла
+            # его дублировать
+            if not self._add_fk_indexes or field.uniqueness != UniqueType.NOT_UNIQUE:
+                return
+
+            self._indexes.append(Index(
+                table=table,
+                field=field.name
+            ))
+
             return
 
         raise ValueError(f'Неизвестное определение атрибута "{name}: {value}"')
@@ -162,6 +178,7 @@ class DatabaseSchemaBuilder:
         self._resolve_foreign_keys()
         return DbSchema(
             foreign_keys=list(self._foreign_keys),
+            indexes=self._indexes,
             tables=list(self._tables)
         )
 

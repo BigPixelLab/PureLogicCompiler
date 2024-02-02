@@ -1,6 +1,6 @@
 import re
 
-from classes.types import Table, ForeignKey, Field, UniqueType, ComplexUniqueness, DbSchema, OnDeleteAction
+from classes.types import Table, ForeignKey, Field, UniqueType, ComplexUniqueness, DbSchema, OnDeleteAction, Index
 
 
 class SqlBuilder:
@@ -9,6 +9,8 @@ class SqlBuilder:
 
 
 class PostgreSqlBuilder(SqlBuilder):
+    """ Класс, отвечающий за сборку DDL скрипта для Postgre """
+
     VALID_SCHEMA_PATTERN = re.compile(
         r'\w+',
         flags=re.VERBOSE
@@ -33,6 +35,7 @@ class PostgreSqlBuilder(SqlBuilder):
             # Makes so only types from given table can be used
     ):
         self._foreign_keys = db_schema.foreign_keys
+        self._indexes = db_schema.indexes
         self._tables = db_schema.tables
 
         self._explicit_uniques = explicit_uniques
@@ -163,6 +166,9 @@ class PostgreSqlBuilder(SqlBuilder):
 
         return ' '.join(items) + ';'
 
+    def get_index_sql(self, index: Index):
+        return f'CREATE INDEX ON {index.table.full_name} ({index.field})'
+
     def get_db_sql(self):
         sql_statements = []
 
@@ -202,6 +208,14 @@ class PostgreSqlBuilder(SqlBuilder):
 
         if foreign_keys:
             sql_statements.append(foreign_keys)
+
+        indexes = '\n'.join(
+            self.get_index_sql(index)
+            for index in self._indexes
+        )
+
+        if indexes:
+            sql_statements.append(indexes)
 
         return '\n\n'.join(sql_statements)
 

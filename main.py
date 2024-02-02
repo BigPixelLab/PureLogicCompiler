@@ -63,7 +63,7 @@ class Application:
         print('ERROR:', *exception.args)
 
     def _load_schema(self, schema_files: Iterable[str], encoding: str) -> Optional[DbSchema]:
-        dsb = DatabaseSchemaBuilder()
+        dsb = DatabaseSchemaBuilder(add_fk_indexes=self._args.add_fk_index)
 
         self.notify('ЗАГРУЗКА СХЕМЫ:')
         for path in schema_files:
@@ -104,7 +104,10 @@ class Application:
         encoding = getattr(self._args, 'encoding', 'utf-8')
 
         try:
-            schema_files = get_files(self._args.input, recursive=self._args.recursive)
+            schema_files = get_files(
+                self._args.input,
+                recursive=not self._args.non_recursive
+            )
         except Exception as error:
             print('ERROR:', *error.args)
             return
@@ -131,22 +134,50 @@ class Application:
         )
 
         # Комманды для компиляции
-        compile_parser = subparsers.add_parser('compile',
-                                               help='Конпиляция схемы в DDL')
-        compile_parser.add_argument('input',
-                                    help='Путь к файлу или директории содержащей схему')
-        compile_parser.add_argument('-o', '--output', default=None,
-                                    help='Путь к месту сохранения DDL скрипта. '
-                                         'Если не указан, скрипт будет выведен в stdout')
-        compile_parser.add_argument('--encoding', default=None,
-                                    help='Кодировка входных файлов. Если указан output, '
-                                         'произведённый файл будет в этой же кодировке. '
-                                         'По-умолчанию используется "utf-8"')
-        compile_parser.add_argument('-r', '--recursive', action='store_true',
-                                    help='Рекурсивный обход директории, содержащей схему')
-        compile_parser.add_argument('-s', '--silent', action='store_true',
-                                    help='Не выводить информацию предназначенную для пользователя')
+        compile_parser = subparsers.add_parser(
+            'compile',
+            help='Конпиляция схемы в DDL'
+        )
         compile_parser.set_defaults(function=self.compile_to_ddl)
+
+        compile_parser.add_argument(
+            'input',
+            help='Путь к файлу или директории содержащей схему'
+        )
+        compile_parser.add_argument(
+            '-s', '--silent', action='store_true',
+            help='Не выводить информацию предназначенную для пользователя'
+        )
+
+        loading_group = compile_parser.add_argument_group(
+            'Загрузка схемы', 'Настройка того как загружается схема'
+        )
+
+        loading_group.add_argument(
+            '-o', '--output', default=None,
+            help='Путь к месту сохранения DDL скрипта. '
+                 'Если не указан, скрипт будет выведен в stdout'
+        )
+        loading_group.add_argument(
+            '--encoding', default=None,
+            help='Кодировка входных файлов. Если указан output, '
+                'произведённый файл будет в этой же кодировке. '
+                'По-умолчанию используется "utf-8"'
+        )
+        loading_group.add_argument(
+            '--non-recursive', action='store_true', dest='non_recursive',
+            help='Не обходить директорию рекурсивно. Если указанно, '
+                 'не будет искать файлы схемы в дочених папках'
+        )
+
+        compiling_group = compile_parser.add_argument_group(
+            'Генерация DDL', 'Настройка получаемого на выходе DDL'
+        )
+
+        compiling_group.add_argument(
+            '--fk-index', action='store_true', dest='add_fk_index',
+            help='Добавить индексы на внешние ключи'
+        )
 
         self._args: argparse.Namespace = parser.parse_args()
 
