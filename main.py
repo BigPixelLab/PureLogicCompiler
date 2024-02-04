@@ -129,14 +129,14 @@ class Application:
         )
 
         subparsers = parser.add_subparsers(
-            title='подкомманды',
-            description='доступные подкомманды'
+            title='Подкоманды',
+            description='Доступные подкоманды'
         )
 
-        # Комманды для компиляции
+        # Команды для компиляции
         compile_parser = subparsers.add_parser(
             'compile',
-            help='Конпиляция схемы в DDL'
+            help='Компиляция схемы в DDL'
         )
         compile_parser.set_defaults(function=self.compile_to_ddl)
 
@@ -167,7 +167,7 @@ class Application:
         loading_group.add_argument(
             '--non-recursive', action='store_true', dest='non_recursive',
             help='Не обходить директорию рекурсивно. Если указанно, '
-                 'не будет искать файлы схемы в дочених папках'
+                 'не будет искать файлы схемы в дочерних папках'
         )
 
         compiling_group = compile_parser.add_argument_group(
