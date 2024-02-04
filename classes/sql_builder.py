@@ -1,6 +1,6 @@
 import re
 
-from classes.types import Table, ForeignKey, Field, UniqueType, ComplexUniqueness, DbSchema, OnDeleteAction, Index
+from classes.pl_types import Table, ForeignKey, Field, UniqueType, ComplexUniqueness, DbSchema, OnDeleteAction, Index
 
 
 class SqlBuilder:

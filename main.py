@@ -6,7 +6,7 @@ from typing import Optional, Iterable
 
 from classes.database_schema_builder import DatabaseSchemaBuilder
 from classes.sql_builder import PostgreSqlBuilder, DEFAULT_TYPE_TABLE
-from classes.types import DbSchema
+from classes.pl_types import DbSchema
 
 
 class ExecutionTimeContextManager:
@@ -161,8 +161,8 @@ class Application:
         loading_group.add_argument(
             '--encoding', default=None,
             help='Кодировка входных файлов. Если указан output, '
-                'произведённый файл будет в этой же кодировке. '
-                'По-умолчанию используется "utf-8"'
+                 'произведённый файл будет в этой же кодировке. '
+                 'По-умолчанию используется "utf-8"'
         )
         loading_group.add_argument(
             '--non-recursive', action='store_true', dest='non_recursive',

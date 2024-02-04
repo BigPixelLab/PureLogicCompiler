@@ -1,23 +1,23 @@
-from enum import Enum, auto, IntEnum
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel
 
 
-class UniqueType(Enum):
-    NOT_UNIQUE = auto()
-    UNIQUE = auto()
-    STRICT_UNIQUE = auto()
-    PRIMARY_KEY = auto()
+class UniqueType(str, Enum):
+    NOT_UNIQUE = 'NOT UNIQUE'
+    UNIQUE = 'UNIQUE'
+    STRICT_UNIQUE = 'UNIQUE NULLS DISTINCT'
+    PRIMARY_KEY = 'PRIMARY KEY'
 
 
-class OnDeleteAction(Enum):
-    NO_ACTION = auto()
-    SET_NULL = auto()
-    CASCADE = auto()
+class OnDeleteAction(str, Enum):
+    NO_ACTION = 'NO ACTION'
+    SET_NULL = 'SET NULL'
+    CASCADE = 'CASCADE'
 
 
-class ConnectType(IntEnum):
+class ConnectType(int, Enum):
     # is_not_unique, is_other_table, is_optional
     SOME_TO_EVERY = 0b000  # o-
     SOME_TO_SOME_LEFT = 0b001  # oo

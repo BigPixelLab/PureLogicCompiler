@@ -3,7 +3,7 @@ from typing import Optional, Union
 
 import yaml
 
-from classes.types import Table, ForeignKey, ComplexUniqueness, Field, UniqueType, ConnectType, DbSchema, \
+from classes.pl_types import Table, ForeignKey, ComplexUniqueness, Field, UniqueType, ConnectType, DbSchema, \
     OnDeleteAction, Index
 
 
@@ -43,6 +43,9 @@ class DatabaseSchemaBuilder:
 
         if not re.fullmatch(r'\w+', name):
             raise ValueError(f'Невозможно создать поле с именем "{name}" в таблице "{table.full_name}"')
+
+        if not isinstance(value, str):
+            raise ValueError('Значение атрибута должно быть строкой')
 
         comment = None
 
